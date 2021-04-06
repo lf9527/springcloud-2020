@@ -1,0 +1,388 @@
+spring cloud升级
+服务注册中心：Eureka(X) Zookeeper(可用) Consul(可用) Nacos(可用)
+
+服务调用：Ribbon() LoadBalancer(逐渐替换Ribbon)
+		  OpenFeign(已经替换Feign)
+
+服务降级：Hystrix(停更逐渐不用) resilience4j(国外) sentient(SpringCloud Alibaba Sentinel实现服务熔断与限流) 
+
+服务网关：Zuul(不用) Zuul2(没有出来) gateway(目前主流)
+
+服务配置：Config(不用) Nacos(Alibaba Nacos)
+
+服务总线：Bus(不用) Nacos(Alibaba Nacos)
+
+-----------------------------------------------------------------------------------------------------
+
+dependencyManagement元素：
+	让所有子项目中引用一个依赖而不用显式的列出版本号；
+	Maven会沿着父子层次向上走，直到找到一个拥有dependencyManagement元素的项目，
+	然后就会使用这个dependencyManagement元素中指定的版本号。
+	使用dependencyManagement去做版本依赖管理
+	
+-----------------------------------------------------------------------------------------------------
+
+支付模块
+mysql> create table payment(id bigint not null primary key auto_increment,serial varchar(200));	
+
+
+-----------------------------------------------------------------------------------------------------
+
+微服务消费者订单cloud-consumer-order80模块
+
+
+<dependency>
+  		<groupId>cn.hutools</groupId>
+  		<artifactId>hutool-all</artifactId>
+  		<version>5.1.0</version>
+  	</dependency>
+日期与字符串转换
+文件操作
+转码与反转码
+随机数生成
+压缩与解压
+编码与解码
+CVS文件操作
+缓存处理
+加密解密
+定时任务
+邮件收发
+二维码创建
+FTP 上传与下载
+图形验证码生成
+
+-----------------------------------------------------------------------------------------------------
+Eureka基础知识
+	eureka.client.register-with-eureka: fals 不向注册中心注册自己
+	eureka.client.fetch-registry: false 不需要去检索自己的服务
+
+-----------------------------------------------------------------------------------------------------
+
+SERVICE_URL = "http://CLOUD-PAYMENT-SERVICE/payment"
+使用微服务名称CLOUD-PAYMENT-SERVICE代替localhost:7001必须在RestTemplate添加@LoadBalanced注解
+
+-----------------------------------------------------------------------------------------------------
+
+zookeeper
+是一个分布式协调工具，可以实现注册中心功能，zookeeper服务器取代eureka服务器，zookeeper作为服务注册中心
+微服务注册进zookeeper的是临时节点
+
+主启动类添加注解：@EnableDiscoveryClient
+
+application.yml
+	spring.cloud.zookeeper.connect-string: localhost:2181
+
+zoo.cfg
+# The number of milliseconds of eachtick 心跳间隔毫秒每次
+tickTime=2000
+#The number of ticks that the initial 初始化连接超时次数
+initLimit=10
+#The number of ticks that can pass between sending a request and gettinganacknowledgemtn
+syncLimit=5
+#The directory where the snapshotisstored镜像数据位置
+dataDir=F:\zookeeper\zookeeper-3.5.4-beta\\data
+dataLogDir=F:\zookeeper\zookeeper-3.5.4-beta\\logs
+#the port at which the clientswillconnect
+clientPort=2181
+
+-----------------------------------------------------------------------------------------------------
+
+Consul
+是一套开源的分布式服务发现和配置管理系统，由Go语言开发。
+	提供了微服务系统中的服务治理、配置中心、控制总线等功能，这些功能都可以根据需要单独使用，也可以一起
+	使用以构建全方位的服务网格，Consul提供了一种完整的服务网格解决方案
+
+Consul优点：
+	基于raft协议，比较简洁(Raft: 是一种保证 强一致性 的分布式协议)；
+	支持健康检查；
+	支持HTTP和DNS协议；
+	支持跨数据中心的WAN集群，提供图形界面；
+	跨平台，支持Linux, Mac, Windows
+	
+Consul作用：
+	服务发现：提供HTTP、DNS两种发现方式。
+	健康监测：支持多种方式：HTTP,TCP,Docker,Shell脚本定制化
+	K-V存储：Key/Value的存储方式
+	多数据中心：
+	可视化web界面
+https://www.consul.io/downloads.html
+
+https://www.springcloud.cc/spring-cloud-consul.html	
+	
+Consul安装：
+	1、解压安装包，只有一个consul.exe,放到D:\installs\consul目录下
+	2、配置环境变量：Path后面添加路径：D:\installs\consul
+	3、DOS下运行：consul agent -dev
+	4、访问：http://localhost:8500
+	
+	
+使用Consul步骤：
+	1、pom.xml dependency: spring-cloud-starter-consul-discovery
+	2、application.yml
+		spring.cloud.consul.host:localhost
+		spring.cloud.consul.port:8500
+		spring.cloud.consul.discovery.service-name: ${spring.application.name} #cloud-payment-service
+	3、启动类注解：@EnableDiscoveryClient
+	4、访问：http://localhost:8500
+	
+
+
+-----------------------------------------------------------------------------------------------------
+			语言	CAP		服务健康检查		对外暴露接口		spring cloud集成
+Eureka:		java	AP		可配支持			HTTP				已经集成
+Consul:		go		CP		支持				HTTP/DNS			已经集成
+zookeeper:	java	CP		支持				客户端				已经集成
+
+
+-----------------------------------------------------------------------------------------------------
+
+Ribbon
+	Nginx是服务器负载均衡，客户端所有请求都会交给Nginx，然后由nginx实现转发请求。负载均衡由服务端实现。
+	Ribbon本地负载均衡，在调用微服务接口时会在注册中心获取注册信息服务列表之后缓存在JVM本地，从而在本地实现RPC远程服务调用
+
+Ribbon默认的是轮询负载均衡
+
+修改默认Ribbon负载均衡：
+	1、自定义配置类不能放在@ConponentScan所扫描的当前包及其包下，否则自定义的配置类就会被所有的Ribbon客户端共享，达不到定制目的
+	2、新建package包，独立于@SpringBootApplication所在的包
+	3、自定义配置类：@Configuration public class CustomSelfRule{@Bean public IRule rule(){return new RandomRule();}}
+	4、启动类添加注解：@RibbonClient(name="微服务名cloud-payment-service", configuration=CustomSelfRule.class)
+
+自定义Ribbon负载均衡：
+	1、新建package包，独立于@SpringBootApplication所在的包
+	2、
+
+
+-----------------------------------------------------------------------------------------------------
+
+openFeign
+	
+Feign是一个声明式webService客户端，使用Feign能让编写webService客户端更加简单
+使用方法：
+	只需创建一个接口并在接口上添加注解即可@FeignClient
+
+openFeign与Feign区别：
+	Feign是spring cloud组件中的一个轻量级RESTFUL的HTTP服务客户端，Feign内置了Ribbon，用来做客户端负载均衡去调用服务注册中心的服务
+	Feign使用方式：使用Feign的注解定义接口，调用这个接口就可以调用 服务注册中心的服务
+	
+	OpenFeign是spring cloud在Feign的基础上支持了spring MVC的注解，如@RequestMapping等，OpenFeign的@FeignClient可以解析spring MVC
+	的@RequestMapping注解下的接口，并通过动态代理的方式产生实现类，实现类中做负载均衡并调用其他服务
+启动类添加注解：@EnableFeignClients
+
+interface接口添加注解：@FeignClient(value ="cloud-payment-service")
+
+设置建立连接超时(两端所用的时间,单位：毫秒)
+ribbon.ReadTimeout: 5000
+建立连接后从服务器读取到可用资源所用的时间
+ribbon.ConnectionTimeout: 5000
+
+
+OpenFeign日志增强
+1、添加配置类：
+	@Configuration 
+	public class FeignConfig{@Bean Logger.Level feignLoggerLevel(){return Logger.Level.FULL;}}
+2、开启日志：
+	logging:
+	  level:
+	    #feign日志以什么级别监控哪个接口
+		com.lai.springcloud.service.PaymentFeignService: debug
+
+-----------------------------------------------------------------------------------------------------
+
+服务熔断机制：
+	服务熔断机制是应对雪崩效应的一种微服务链路保护机制，当某个微服务出错不可用或响应时间太长时，
+	会进行服务的降级，进而熔断该节点微服务的调用，快速返回错误信息。
+	当检测到该节点微服务调用响应正常后恢复调用链路。
+
+	在spring cloud框架里，熔断机制通过hystrix实现监控微服务间调用情况。当失败的调用到一定阈值(缺省
+	值是5秒内20次调用失败)就会启动熔断机制，熔断机制的注解是@HystrixCommand
+	@HystrixCommand(
+            fallbackMethod = "paymentCircuitBreaker_fallback", commandProperties = {
+            @HystrixProperty(name = "circuitBreaker.enabled", value = "true"),// 是否开启断路器
+            @HystrixProperty(name = "circuitBreaker.requestVolumeThreshold", value = "10"),// 请求次数
+            @HystrixProperty(name = "circuitBreaker.sleepWindowInMilliseconds", value = "10000"),// 时间窗口期/时间范文
+            @HystrixProperty(name = "circuitBreaker.errorThresholdPercentage", value = "60")// 失败率达到多少后跳闸
+    }
+    )
+    public String paymentCircuitBreaker(Integer id){...}
+
+
+-----------------------------------------------------------------------------------------------------
+
+geteway新一代网关
+	gateway是在spring生态系统之上构建的API网关服务，基于spring5,spring boot2和project reactor等技术。
+	gateway旨在提供一种简单而有效的方式对API进行路由，以及提供一些强大的过滤器功能：熔断、限流、重试等。
+	目标：替代zuul
+	gateway是基于webFlux框架实现的，而webFlux框架底层则使用了高性能的Reactor模式通信框架Netty。
+	gateway是基于异步非阻塞式处理模型
+	
+	动态路由：能够匹配任何请求属性；
+	可以对路由指定断言Predicate和过滤器
+gateway三大核心概念：路由Route、断言Predicate、过滤器Filter
+
+gateway流程：
+	客户端向spring cloud gateway发出请求；
+	然后在gateway Handler Mapping中找到与请求相匹配的路由，将其发送到gateway Web Handler;
+	Handler再通过指定的过滤器链来将请求发送到实际的服务执行业务逻辑，然后返回；
+	Filter在"pre"类型的过滤器可以做参数校验、权限校验、流量监控、日志输出、协议转换等；
+	Filter在"post"类型的过滤器中可以做响应内容、响应头的修改，日志的输出，流量监控等
+
+默认下gateway会根据注册中心注册的服务列表，以注册中心上微服务名为路径创建动态路由进行转发从而实现动态路由的功能
+spring.cloud.gateway.discovery.locator.enabled: true	
+
+spring.cloud.gateway.routes:
+	- id: service-name
+	  #"lb:"意思是在cloud-payment-service服务中进行负载均衡
+	  uri: lb://cloud-payment-service
+	  predicates:
+	    - Path=/payment/payment/get/**
+
+gateway自定义过滤器：
+	实现implements GlobalFilter,Ordered
+	全局日志记录、统一网关鉴权
+		
+		
+-----------------------------------------------------------------------------------------------------
+
+springcloud Bus消息总线
+
+	Bus支持两种消息代理：RabbitMQ和Kafka
+
+什么是总线：
+	在微服务架构的系统中，通常会使用轻量级的消息代理来构建一个共用的消息主题，并让系统中所有微服务实例都连接上来。
+	由于该主题中产生的消息会被所有实例监听和消费。所以称为消息总线
+
+基本原理：
+	ConfigClient实例都监听MQ中同一个topic(默认是springcloud bus)，当一个服务刷新数据时会把这个消息放入到topic中，
+	这样其它监听同一whtopic的服务就能得到通知然后去更新自身的配置。
+	
+	
+-----------------------------------------------------------------------------------------------------
+
+springcloud stream
+
+MQ消息中间件
+	ActiveMQ
+	RabbitMQ
+	RocketMQ(alibaba)
+	Kafka
+	
+项目中可能存在多种消息中间件
+	切换、维护、开发
+
+springcloud stream屏蔽底层消息中间件的差异，降低切换成本，统一消息的编程模型
+自动在各种MQ内切换
+
+如果一消息同时被多个服务获取到，就会造成数据错误(一个订单同时被多个服务获取)，可以使用stream中的消息分组来解决
+在stream中处于同一个group中的多个消费者是竞争关系，就能够保证消息只会被其中一个应用消费一次。
+	不同组是可以消费的(重复消费)，
+	同一组内发生竞争关系就只有其中一个可以消费
+
+stream默认分组group是不同的，组流水号不一样
+
+stream自定义配置分组：
+	分为同一个组解决重复消费问题
+	
+	
+	
+-----------------------------------------------------------------------------------------------------
+
+Nacos: Naming Configuration Service
+Nacos = Eureka + Config + Bus
+
+下载：https://github.com/alibaba/Nacos	
+	
+-----------------------------------------------------------------------------------------------------
+分布式事务执行流程：
+	TM开启分布式事务(TM向TC注册全局事务记录XID)
+	按业务场景，编排数据库、服务等事务内资源(RM向TC汇报资源准备状态)
+	TM结束分布式事务，事务一阶段结束(TM通知TC提交/回滚分布式事务)
+	TC汇总事务信息，决定分布式事务是提交还是回滚
+	TC通知所有RM提交/回滚资源，事务二阶段结束
+	TM:班主任，TC：老师，RM：学生
+	
+	XID：IP:Port:transactionId
+
+雪花算法：
+	毫秒数在高位，自增序列在低位，整个ID都是趋势递增的；
+	不依赖数据库等第三方系统，以服务的方式部署，稳定性更高，生成ID的性能也是非常高；
+	可以根据自身业务特性分配bit位，非常灵活。
+	
+	依赖机器时钟，如果机器时钟回拨，分导致重复ID生成；
+	在单机上是递增的，但是由于设计到分布式环境，每台机器上的时钟不可能完全同步，有时候会出现不是全局递增的情况；
+	
+	
+-----------------------------------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+		  
